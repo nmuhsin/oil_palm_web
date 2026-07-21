@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Detect: Oil Palm FFB Ripeness</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+  .page-head { padding: 44px 0 8px; }
+  .page-head .eyebrow { margin-bottom: 10px; }
+  .page-head h1 { font-size: clamp(24px, 3.6vw, 34px); margin-bottom: 10px; }
+  .page-head p { color: var(--muted); max-width: 560px; font-size: 14.5px; }
+
+  main.detect { padding-top: 32px; padding-bottom: 90px; }
+
+  .drop-zone {
+    border: 2px dashed var(--border); border-radius: var(--radius); padding: 56px 24px;
+    text-align: center; cursor: pointer; transition: border-color .2s, background .2s;
+    position: relative; background: var(--surface); margin-bottom: 28px;
+  }
+  @media (max-width: 480px) {
+    .drop-zone { padding: 36px 16px; }
+    .preview-img-box { flex-basis: 100%; }
+    .preview-img-box img { height: 200px; }
+    .result-confidence { margin-left: 0; text-align: left; width: 100%; }
+    .confidence-gauge { width: 100%; }
+  }
+  .drop-zone:hover, .drop-zone.dragover { border-color: var(--gold); background: rgba(217,147,46,0.05); }
+  .drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .drop-icon { font-size: 40px; margin-bottom: 14px; display: block; }
+  .drop-title { font-family: var(--mono); font-size: 14px; color: var(--text); margin-bottom: 6px; }
+  .drop-hint { font-size: 12px; color: var(--muted); }
+
+  .preview-wrap { display: none; gap: 24px; margin-bottom: 24px; }
+  .preview-wrap.visible { display: flex; flex-wrap: wrap; }
+  .preview-img-box { flex: 0 0 260px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); background: var(--surface); }
+  .preview-img-box img { width: 100%; height: 260px; object-fit: cover; display: block; }
+  .preview-filename { padding: 10px 14px; font-family: var(--mono); font-size: 11px; color: var(--muted); border-top: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .preview-meta { flex: 1; min-width: 220px; display: flex; flex-direction: column; justify-content: center; gap: 10px; }
+  .preview-meta .hint { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+  .btn-row { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; }
+  .btn-analyse { display: none; }
+  .btn-analyse.visible { display: inline-flex; }
+  .btn-analyse:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-reset { display: none; }
+  .btn-reset.visible { display: inline-flex; }
+
+  .loading { display: none; align-items: center; gap: 12px; color: var(--muted); font-family: var(--mono); font-size: 13px; margin-bottom: 32px; }
+  .loading.visible { display: flex; }
+  .spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .result-card { display: none; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 32px; animation: fadeUp .4s ease; }
+  .result-card.visible { display: block; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  .result-header { padding: 22px 24px; display: flex; align-items: center; gap: 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .result-icon { font-size: 32px; }
+  .result-label { font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 4px; }
+  .result-class { font-family: var(--display); font-size: 24px; font-weight: 600; line-height: 1.1; }
+  .result-malay { font-size: 13px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+  .result-confidence { margin-left: auto; text-align: right; }
+  .confidence-num { font-family: var(--mono); font-size: 28px; font-weight: 700; }
+  .confidence-label { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .confidence-gauge { width: 120px; height: 6px; border-radius: 4px; background: var(--surface-2); margin-top: 8px; overflow: hidden; }
+  .confidence-gauge-fill { height: 100%; border-radius: 4px; width: 0%; transition: width .8s ease; }
+  .confidence-caveat { font-family: var(--mono); font-size: 10px; color: var(--muted-dim); margin-top: 8px; max-width: 130px; line-height: 1.4; }
+
+  .prob-section { padding: 20px 24px; border-bottom: 1px solid var(--border); }
+  .prob-title { font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 16px; }
+  .prob-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .prob-name { font-family: var(--mono); font-size: 12px; color: var(--text); min-width: 80px; }
+  .prob-bar-wrap { flex: 1; height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .prob-bar { height: 100%; border-radius: 4px; transition: width .8s cubic-bezier(.4,0,.2,1); width: 0%; }
+  .prob-pct { font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 46px; text-align: right; }
+
+  .advice-section { padding: 18px 24px; background: var(--surface-2); }
+  .advice-label { font-family: var(--mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 6px; }
+  .advice-text { font-size: 13.5px; color: var(--text); line-height: 1.6; }
+
+  .warning-box { display: none; background: rgba(202,138,4,0.1); border: 1px solid rgba(202,138,4,0.35); color: #e0a83d; border-radius: var(--radius); padding: 16px 20px; margin-bottom: 24px; font-size: 13px; line-height: 1.6; }
+  .warning-box.visible { display: block; }
+  .warning-title { font-family: var(--mono); font-size: 12px; font-weight: 700; margin-bottom: 6px; letter-spacing: .05em; }
+
+  .demo-badge { display: none; background: rgba(202,138,4,0.12); border: 1px solid rgba(202,138,4,0.3); color: #e0a83d; border-radius: 6px; padding: 10px 16px; font-family: var(--mono); font-size: 12px; margin-bottom: 24px; }
+  .demo-badge.visible { display: block; }
+  .error-box { display: none; background: rgba(138,46,46,0.12); border: 1px solid rgba(138,46,46,0.4); color: #e0776f; border-radius: var(--radius); padding: 14px 18px; font-family: var(--mono); font-size: 13px; margin-bottom: 24px; }
+  .error-box.visible { display: block; }
+
+  .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 44px; }
+  .info-pill { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .info-pill-icon { font-size: 20px; margin-bottom: 8px; }
+  .info-pill-name { font-family: var(--mono); font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+  .info-pill-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <div class="brand">
+      <span class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#d9932e" opacity="0.15"/><path d="M12 4c-2.5 2-4 5-4 8s1.5 6 4 8c2.5-2 4-5 4-8s-1.5-6-4-8z" fill="#d9932e"/></svg>
+      </span>
+      FFB RIPENESS · CSP600
+    </div>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/detect" class="active">Detect</a>
+    </div>
+    <a href="/" class="nav-cta" style="background:transparent;border:1px solid var(--border);color:var(--text)">← Home</a>
+  </div>
+</nav>
+
+<div class="wrap page-head">
+  <div class="eyebrow">Step 1 of 1</div>
+  <h1>Upload a fresh fruit bunch photo</h1>
+  <p>A close, well-lit shot of the bunch works best. If the model's confidence is low, you'll see a note next to the result instead of a silent wrong grading.</p>
+</div>
+
+<main class="detect wrap">
+
+  <div class="demo-badge" id="demoBadge">⚠️ DEMO MODE. No trained model found. Run train.py first. Predictions are random.</div>
+  <div class="error-box" id="errorBox"></div>
+
+  <div class="warning-box" id="warningBox">
+    <div class="warning-title">⚠️ LOW CONFIDENCE READING</div>
+    <div id="warningText"></div>
+  </div>
+
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept=".jpg,.jpeg,.png">
+    <span class="drop-icon">🌴</span>
+    <div class="drop-title">Drop an FFB image here or click to browse</div>
+    <div class="drop-hint">Supports JPG and PNG · max 16 MB · must be an oil palm fruit image</div>
+  </div>
+
+  <div class="preview-wrap" id="previewWrap">
+    <div class="preview-img-box">
+      <img id="previewImg" src="" alt="Preview">
+      <div class="preview-filename" id="previewName"></div>
+    </div>
+    <div class="preview-meta">
+      <div class="hint">Looks good? Run the model on this image, or drop a different one to replace it.</div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-primary btn-analyse" id="btnAnalyse" onclick="runPrediction()">▶ Analyse image</button>
+    <button class="btn btn-ghost btn-reset" id="btnReset" onclick="resetAll()">✕ Reset</button>
+  </div>
+
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    Running CNN inference…
+  </div>
+
+  <div class="result-card" id="resultCard">
+    <div class="result-header" id="resultHeader">
+      <div class="result-icon" id="resultIcon"></div>
+      <div>
+        <div class="result-label">Predicted ripeness</div>
+        <div class="result-class" id="resultClass"></div>
+        <div class="result-malay" id="resultMalay"></div>
+      </div>
+      <div class="result-confidence">
+        <div class="confidence-num" id="confNum"></div>
+        <div class="confidence-label">confidence</div>
+        <div class="confidence-gauge"><div class="confidence-gauge-fill" id="confGaugeFill"></div></div>
+        <div class="confidence-caveat">model estimate, not a guarantee</div>
+      </div>
+    </div>
+    <div class="prob-section">
+      <div class="prob-title">Class probabilities</div>
+      <div id="probBars"></div>
+    </div>
+    <div class="advice-section">
+      <div class="advice-label">Harvest recommendation</div>
+      <div class="advice-text" id="adviceText"></div>
+    </div>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-pill">
+      <div class="info-pill-icon">🟢</div>
+      <div class="info-pill-name" style="color:#c85a2e">Ripe (Masak)</div>
+      <div class="info-pill-desc">Orange-red fruit. Peak oil content. Optimal harvest window.</div>
+    </div>
+    <div class="info-pill">
+      <div class="info-pill-icon">🟠</div>
+      <div class="info-pill-name" style="color:#6a8a3f">Unripe (Belum Masak)</div>
+      <div class="info-pill-desc">Dark green/black fruit. Low oil extraction. Do not harvest yet.</div>
+    </div>
+    <div class="info-pill">
+      <div class="info-pill-icon">🔴</div>
+      <div class="info-pill-name" style="color:#8a2e2e">Overripe (Terlalu Masak)</div>
+      <div class="info-pill-desc">Dark red/purple fruit. Elevated FFA. Harvest immediately.</div>
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Oil Palm FFB Ripeness Detector · FYP CSP600 · Universiti Teknologi MARA</span>
+    <span id="footerModel">Model: loading…</span>
+  </div>
+</footer>
+
+<script>
+let selectedFile = null;
+
+const fileInput   = document.getElementById('fileInput');
+const dropZone    = document.getElementById('dropZone');
+const previewWrap = document.getElementById('previewWrap');
+const previewImg  = document.getElementById('previewImg');
+const previewName = document.getElementById('previewName');
+const btnAnalyse  = document.getElementById('btnAnalyse');
+const btnReset    = document.getElementById('btnReset');
+const loading     = document.getElementById('loading');
+const resultCard  = document.getElementById('resultCard');
+const errorBox    = document.getElementById('errorBox');
+const demoBadge   = document.getElementById('demoBadge');
+const warningBox  = document.getElementById('warningBox');
+const warningText = document.getElementById('warningText');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('dragover'); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+function handleFile(file) {
+  selectedFile = file;
+  const reader = new FileReader();
+  reader.onload = e => {
+    previewImg.src = e.target.result;
+    previewName.textContent = file.name;
+    previewWrap.classList.add('visible');
+    btnAnalyse.classList.add('visible');
+    btnReset.classList.add('visible');
+    resultCard.classList.remove('visible');
+    errorBox.classList.remove('visible');
+    warningBox.classList.remove('visible');
+  };
+  reader.readAsDataURL(file);
+}
+
+async function runPrediction() {
+  if (!selectedFile) return;
+  btnAnalyse.disabled = true;
+  loading.classList.add('visible');
+  resultCard.classList.remove('visible');
+  errorBox.classList.remove('visible');
+  warningBox.classList.remove('visible');
+
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+
+  try {
+    const res  = await fetch('/predict', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Server error');
+
+    if (data.low_confidence) {
+      warningText.textContent =
+        `The model is only ${data.confidence}% confident in this grading. The photo could still be a valid FFB, ` +
+        `lighting, angle, or a partly hidden bunch can lower confidence. Try a clearer, closer shot for a more reliable result.`;
+      warningBox.classList.add('visible');
+    }
+    renderResult(data);
+
+    if (data.demo_mode) demoBadge.classList.add('visible');
+
+  } catch (err) {
+    errorBox.textContent = '✕ Error: ' + err.message;
+    errorBox.classList.add('visible');
+  } finally {
+    btnAnalyse.disabled = false;
+    loading.classList.remove('visible');
+  }
+}
+
+function renderResult(data) {
+  document.getElementById('resultIcon').textContent  = data.class_icon;
+  document.getElementById('resultClass').textContent = data.class_name;
+  document.getElementById('resultClass').style.color = data.class_color;
+  document.getElementById('resultMalay').textContent = data.class_malay;
+  document.getElementById('confNum').textContent     = Math.min(data.confidence, 99.9).toFixed(1) + '%';
+  document.getElementById('confNum').style.color     = data.class_color;
+  document.getElementById('adviceText').textContent  = data.advice;
+  document.getElementById('resultHeader').style.background = data.class_color + '14';
+
+  const gaugeFill = document.getElementById('confGaugeFill');
+  gaugeFill.style.background = data.class_color;
+  gaugeFill.style.width = '0%';
+
+  const container = document.getElementById('probBars');
+  container.innerHTML = '';
+  data.probabilities.forEach(p => {
+    container.innerHTML += `
+      <div class="prob-row">
+        <div class="prob-name">${p.name}</div>
+        <div class="prob-bar-wrap">
+          <div class="prob-bar" style="background:${p.color}" data-pct="${p.probability}"></div>
+        </div>
+        <div class="prob-pct">${p.probability}%</div>
+      </div>`;
+  });
+
+  resultCard.classList.add('visible');
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.prob-bar').forEach(bar => { bar.style.width = bar.dataset.pct + '%'; });
+    gaugeFill.style.width = Math.min(data.confidence, 100) + '%';
+  });
+}
+
+function resetAll() {
+  selectedFile = null;
+  fileInput.value = '';
+  previewWrap.classList.remove('visible');
+  btnAnalyse.classList.remove('visible');
+  btnReset.classList.remove('visible');
+  resultCard.classList.remove('visible');
+  errorBox.classList.remove('visible');
+  warningBox.classList.remove('visible');
+  demoBadge.classList.remove('visible');
+  loading.classList.remove('visible');
+}
+
+function prettyModelName(path) {
+  if (!path) return 'Unknown';
+  const file = path.split(/[\\/]/).pop().toLowerCase();
+  if (file.includes('inceptionv3'))  return 'InceptionV3';
+  if (file.includes('resnet50v2'))   return 'ResNet50V2';
+  if (file.includes('mobilenetv2'))  return 'MobileNetV2';
+  if (file.includes('baseline'))     return 'Baseline CNN';
+  return file;
+}
+
+fetch('/health').then(r => r.json()).then(d => {
+  document.getElementById('footerModel').textContent =
+    d.model_loaded
+      ? `Model: ${prettyModelName(d.model_path)} · ${d.input_size[0]}×${d.input_size[1]} · threshold: ${d.threshold}%`
+      : 'Model: not loaded, demo mode';
+  if (!d.model_loaded) demoBadge.classList.add('visible');
+}).catch(() => {});
+</script>
+</body>
+</html>

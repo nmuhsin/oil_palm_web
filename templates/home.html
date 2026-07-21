@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oil Palm FFB Ripeness Detector</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+  /* ---------- Hero ---------- */
+  .hero { padding: 0; min-height: calc(100vh - 69px); display: flex; align-items: center; }
+  .hero-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 56px; align-items: center; width: 100%; padding: 40px 0; }
+  @media (max-width: 860px) { .hero-grid { grid-template-columns: 1fr; } }
+  .hero h1 { font-size: clamp(34px, 5vw, 54px); margin-bottom: 20px; }
+  .hero h1 em { font-style: normal; color: var(--gold); }
+  .hero p.lede { color: var(--muted); font-size: 16.5px; max-width: 480px; margin-bottom: 32px; }
+  .hero-actions { display: flex; gap: 14px; flex-wrap: wrap; }
+
+  /* ---------- Spectrum (signature element) ---------- */
+  .spectrum-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 28px 28px 24px; margin-top: 8px;
+  }
+  .spectrum-label { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 18px; }
+  .spectrum-track {
+    position: relative; height: 10px; border-radius: 6px; margin: 0 4px 22px;
+    background: linear-gradient(90deg, var(--unripe) 0%, var(--unripe) 30%, var(--ripe) 45%, var(--ripe) 68%, var(--overripe) 82%, var(--overripe) 100%);
+  }
+  .spectrum-pointer {
+    position: absolute; top: -9px; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--bg); border: 3px solid var(--gold); transform: translateX(-50%);
+    left: 15%; transition: left .45s cubic-bezier(.4,0,.2,1);
+    box-shadow: 0 0 0 4px rgba(20,23,15,0.6);
+  }
+  .spectrum-zones { display: flex; justify-content: space-between; gap: 8px; }
+  .zone-btn {
+    flex: 1; background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 10px 8px; font-family: var(--mono); font-size: 11px; color: var(--muted);
+    cursor: pointer; text-align: center; transition: border-color .15s, color .15s, background .15s;
+  }
+  .zone-btn:hover { border-color: var(--muted); color: var(--text); }
+  .zone-btn.active { color: var(--bg); font-weight: 700; }
+  .zone-btn.active[data-zone="unripe"]   { background: var(--unripe); border-color: var(--unripe); }
+  .zone-btn.active[data-zone="ripe"]     { background: var(--ripe); border-color: var(--ripe); }
+  .zone-btn.active[data-zone="overripe"] { background: var(--overripe); border-color: var(--overripe); }
+
+  .spectrum-readout { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
+  .readout-title { font-family: var(--display); font-size: 20px; margin-bottom: 6px; transition: color .2s; }
+  .readout-malay { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .readout-desc { font-size: 13.5px; color: var(--text); line-height: 1.6; }
+
+  /* ---------- How it works (real sequence, numbering justified) ---------- */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 40px; }
+  @media (max-width: 780px) { .steps { grid-template-columns: 1fr; } }
+  .step { border: 1px solid var(--border); border-radius: var(--radius); padding: 26px; background: var(--surface); position: relative; }
+  .step-num { font-family: var(--mono); font-size: 12px; color: var(--gold); margin-bottom: 14px; }
+  .step h3 { font-size: 18px; margin-bottom: 8px; }
+  .step p { color: var(--muted); font-size: 13.5px; }
+  .step-connector { position: absolute; top: 26px; right: -24px; width: 24px; height: 1px; background: var(--border); }
+  @media (max-width: 780px) { .step-connector { display: none; } }
+
+  /* ---------- Model performance ---------- */
+  #model { padding: 40px 0; }
+  #model h2 { font-size: clamp(20px, 2.6vw, 28px); margin-bottom: 8px; }
+  #model .section-sub { font-size: 14px; }
+  .perf-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 24px; margin-top: 20px; align-items: start; }
+  @media (max-width: 860px) { .perf-grid { grid-template-columns: 1fr; } }
+  .bar-row { margin-bottom: 10px; }
+  .bar-row-top { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 12.5px; margin-bottom: 6px; }
+  .bar-row-top .val { color: var(--muted); }
+  .bar-track { height: 10px; border-radius: 6px; background: var(--surface-2); overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 6px; width: 0%; transition: width 1s cubic-bezier(.4,0,.2,1); }
+  .bar-row.selected .bar-row-top { color: var(--gold); }
+
+  .callout {
+    background: var(--surface); border: 1px solid var(--gold-dim); border-radius: var(--radius);
+    padding: 16px 18px; height: fit-content;
+  }
+  .callout .eyebrow { margin-bottom: 12px; }
+  .callout p { font-size: 12.5px; color: var(--text); line-height: 1.5; margin-bottom: 8px; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout strong { color: var(--gold); }
+
+  /* ---------- Class cards ---------- */
+  .class-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 16px; }
+  @media (max-width: 780px) { .class-grid { grid-template-columns: 1fr; } }
+  .class-card { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+  .class-card-top { height: 6px; }
+  .class-card-body { padding: 14px 16px; }
+  .class-card h3 { font-size: 16px; margin-bottom: 2px; }
+  .class-card .my-name { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-bottom: 8px; display: block; }
+  .class-card p { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+  .subsection { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border); }
+  .final-cta-inline { text-align: center; }
+  .final-cta-inline h2 { margin-bottom: 6px; }
+  .final-cta-inline .section-sub { margin: 0 auto 16px; text-align: center; }
+</style>
+</head>
+<body>
+
+<nav class="site-nav">
+  <div class="wrap">
+    <div class="brand">
+      <span class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#d9932e" opacity="0.15"/><path d="M12 4c-2.5 2-4 5-4 8s1.5 6 4 8c2.5-2 4-5 4-8s-1.5-6-4-8z" fill="#d9932e"/></svg>
+      </span>
+      FFB RIPENESS · CSP600
+    </div>
+    <div class="nav-links" id="navLinks">
+      <a href="/" data-nav="home" class="active">Home</a>
+      <a href="#how-it-works" data-nav="how-it-works">How it works</a>
+      <a href="#model" data-nav="model">Model</a>
+    </div>
+    <a href="/detect" class="nav-cta">Start Detection</a>
+  </div>
+</nav>
+
+<header class="hero" id="home">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="eyebrow">CNN Image Classification</div>
+      <h1>Know your harvest window <em>before</em> you cut the bunch.</h1>
+      <p class="lede">Upload a photo of an oil palm fresh fruit bunch and get an instant ripeness grading. The CNN sorts it into Unripe, Ripe, or Overripe, trained on 1,380 labelled images.</p>
+      <div class="hero-actions">
+        <a href="/detect" class="btn btn-primary">▶ Start Detection</a>
+        <a href="#how-it-works" class="btn btn-ghost">See how it works</a>
+      </div>
+    </div>
+
+    <div class="spectrum-card reveal">
+      <div class="spectrum-label">Ripeness spectrum: try it</div>
+      <div class="spectrum-track">
+        <div class="spectrum-pointer" id="spectrumPointer"></div>
+      </div>
+      <div class="spectrum-zones">
+        <button class="zone-btn active" data-zone="unripe" data-pos="15">Unripe</button>
+        <button class="zone-btn" data-zone="ripe" data-pos="55">Ripe</button>
+        <button class="zone-btn" data-zone="overripe" data-pos="90">Overripe</button>
+      </div>
+      <div class="spectrum-readout">
+        <div class="readout-title" id="readoutTitle" style="color:var(--unripe)">Unripe · Belum Masak</div>
+        <div class="readout-malay" id="readoutMalay">Dark green to black fruitlets, tightly packed</div>
+        <div class="readout-desc" id="readoutDesc">Oil content is still low. Leave the bunch on the palm, harvesting now costs you extraction yield later.</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="how-it-works">
+  <div class="wrap">
+    <div class="eyebrow reveal">The process</div>
+    <h2 class="reveal">Three steps, one grading</h2>
+    <p class="section-sub reveal">Every upload runs through the same fixed pipeline, no manual thresholds to fiddle with.</p>
+    <div class="steps">
+      <div class="step reveal">
+        <div class="step-num">01</div>
+        <h3>Upload a photo</h3>
+        <p>Drop in a JPG or PNG of a fresh fruit bunch. Any angle works, but a clear, close-up shot gives the model the most to work with.</p>
+        <div class="step-connector"></div>
+      </div>
+      <div class="step reveal">
+        <div class="step-num">02</div>
+        <h3>CNN inference</h3>
+        <p>MobileNetV2 processes the raw image and outputs a probability for each of the three ripeness classes.</p>
+        <div class="step-connector"></div>
+      </div>
+      <div class="step reveal">
+        <div class="step-num">03</div>
+        <h3>Grading + advice</h3>
+        <p>You get the predicted class, a confidence score, and a plain-language harvest recommendation.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="model">
+  <div class="wrap">
+    <div class="eyebrow reveal">Under the hood</div>
+    <h2 class="reveal">Why MobileNetV2 runs this app</h2>
+    <p class="section-sub reveal">Four architectures were benchmarked on the same dataset. The highest accuracy didn't win. Robustness to bad input did.</p>
+
+    <div class="perf-grid">
+      <div class="reveal">
+        <div class="bar-row" data-acc="75.36">
+          <div class="bar-row-top"><span>Baseline CNN</span><span class="val">75.36%</span></div>
+          <div class="bar-track"><div class="bar-fill" style="background:var(--muted-dim)"></div></div>
+        </div>
+        <div class="bar-row" data-acc="90.82">
+          <div class="bar-row-top"><span>ResNet50V2</span><span class="val">90.82%</span></div>
+          <div class="bar-track"><div class="bar-fill" style="background:var(--muted)"></div></div>
+        </div>
+        <div class="bar-row" data-acc="95.17">
+          <div class="bar-row-top"><span>InceptionV3</span><span class="val">95.17%</span></div>
+          <div class="bar-track"><div class="bar-fill" style="background:var(--ripe)"></div></div>
+        </div>
+        <div class="bar-row selected" data-acc="93.24">
+          <div class="bar-row-top"><span>MobileNetV2 (deployed)</span><span class="val">93.24%</span></div>
+          <div class="bar-track"><div class="bar-fill" style="background:var(--gold)"></div></div>
+        </div>
+      </div>
+
+      <div class="callout reveal">
+        <div class="eyebrow">Out-of-distribution test</div>
+        <p>Four non-FFB images, grass, banana, a hand, a random object, were run through each model to see if it would falsely commit to a ripeness class.</p>
+        <p><strong>MobileNetV2</strong> rejected all four, dropping below the 85% confidence threshold every time.</p>
+        <p>InceptionV3, despite the highest raw accuracy, misclassified all four at 95 to 99% confidence. ResNet50V2 passed three of four.</p>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <div class="eyebrow reveal">The three grades</div>
+      <h2 class="reveal">What the model is looking for</h2>
+      <div class="class-grid">
+        <div class="class-card reveal">
+          <div class="class-card-top" style="background:var(--unripe)"></div>
+          <div class="class-card-body">
+            <h3 style="color:var(--unripe)">Unripe</h3>
+            <span class="my-name">Belum Masak</span>
+            <p>Dark green to black fruitlets, firmly attached. Oil extraction is low, not ready to harvest.</p>
+          </div>
+        </div>
+        <div class="class-card reveal">
+          <div class="class-card-top" style="background:var(--ripe)"></div>
+          <div class="class-card-body">
+            <h3 style="color:var(--ripe)">Ripe</h3>
+            <span class="my-name">Masak</span>
+            <p>Orange-red fruitlets, some loose. Peak oil content, the optimal harvest window.</p>
+          </div>
+        </div>
+        <div class="class-card reveal">
+          <div class="class-card-top" style="background:var(--overripe)"></div>
+          <div class="class-card-body">
+            <h3 style="color:var(--overripe)">Overripe</h3>
+            <span class="my-name">Terlalu Masak</span>
+            <p>Dark red to purple, fruitlets detaching. FFA content is climbing, harvest immediately.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="subsection final-cta-inline">
+      <h2 class="reveal">Ready to grade a bunch?</h2>
+      <p class="section-sub reveal">Upload a photo and get a reading in seconds.</p>
+      <a href="/detect" class="btn btn-primary reveal">▶ Start Detection</a>
+    </div>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Oil Palm FFB Ripeness Detector · FYP CSP600 · Universiti Teknologi MARA</span>
+    <span>MobileNetV2 · 224×224 · threshold 85%</span>
+  </div>
+</footer>
+
+<script>
+  const zoneData = {
+    unripe: {
+      title: 'Unripe · Belum Masak', color: 'var(--unripe)',
+      malay: 'Dark green to black fruitlets, tightly packed',
+      desc: 'Oil content is still low. Leave the bunch on the palm, harvesting now costs you extraction yield later.'
+    },
+    ripe: {
+      title: 'Ripe · Masak', color: 'var(--ripe)',
+      malay: 'Orange-red fruitlets, some starting to loosen',
+      desc: 'Peak oil content. This is the window, harvest within the next day or two for the best extraction rate.'
+    },
+    overripe: {
+      title: 'Overripe · Terlalu Masak', color: 'var(--overripe)',
+      malay: 'Dark red to purple, fruitlets detaching',
+      desc: 'Free fatty acid content is rising fast. Harvest immediately to limit further quality loss.'
+    }
+  };
+
+  const pointer = document.getElementById('spectrumPointer');
+  const buttons = document.querySelectorAll('.zone-btn');
+  const readoutTitle = document.getElementById('readoutTitle');
+  const readoutMalay = document.getElementById('readoutMalay');
+  const readoutDesc  = document.getElementById('readoutDesc');
+
+  function setZone(btn) {
+    buttons.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    pointer.style.left = btn.dataset.pos + '%';
+    const z = zoneData[btn.dataset.zone];
+    readoutTitle.style.color = z.color;
+    readoutTitle.textContent = z.title;
+    readoutMalay.textContent = z.malay;
+    readoutDesc.textContent  = z.desc;
+  }
+
+  buttons.forEach(btn => btn.addEventListener('click', () => setZone(btn)));
+
+  // Scroll reveal
+  const revealEls = document.querySelectorAll('.reveal');
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.15 });
+  revealEls.forEach(el => io.observe(el));
+
+  // Animate accuracy bars once visible
+  const perfSection = document.getElementById('model');
+  const barIO = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        document.querySelectorAll('.bar-row').forEach(row => {
+          row.querySelector('.bar-fill').style.width = row.dataset.acc + '%';
+        });
+        barIO.disconnect();
+      }
+    });
+  }, { threshold: 0.3 });
+  if (perfSection) barIO.observe(perfSection);
+
+  // Scroll-spy: underline whichever nav section is currently in view
+  const navLinkEls = document.querySelectorAll('#navLinks a');
+  const spySections = ['home', 'how-it-works', 'model']
+    .map(id => document.getElementById(id))
+    .filter(Boolean);
+
+  const setActiveNav = (id) => {
+    navLinkEls.forEach(a => a.classList.toggle('active', a.dataset.nav === id));
+  };
+
+  const spyIO = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) setActiveNav(entry.target.id);
+    });
+  }, { rootMargin: '-45% 0px -50% 0px', threshold: 0 });
+
+  spySections.forEach(sec => spyIO.observe(sec));
+</script>
+</body>
+</html>

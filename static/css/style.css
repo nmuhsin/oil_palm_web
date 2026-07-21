@@ -1,0 +1,129 @@
+/* ==============================================================
+   Oil Palm FFB Ripeness Detector - shared design tokens
+   Palette drawn from the fruit itself: unripe green, ripe orange-red,
+   overripe deep red, and crude-palm-oil gold as the working accent.
+   ============================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+:root {
+  --bg:        #14170f;
+  --bg-alt:    #1a2013;
+  --surface:   #1e2416;
+  --surface-2: #262e19;
+  --border:    #37401f;
+  --text:      #f1ead6;
+  --muted:     #9aa583;
+  --muted-dim: #6d7859;
+
+  --gold:      #d9932e;
+  --gold-dim:  #a8721f;
+  --unripe:    #6a8a3f;
+  --ripe:      #c85a2e;
+  --overripe:  #8a2e2e;
+
+  --radius:    14px;
+  --radius-sm: 8px;
+
+  --display: 'Fraunces', serif;
+  --sans:    'Inter', sans-serif;
+  --mono:    'Space Mono', monospace;
+}
+
+* , *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; scroll-snap-type: y proximity; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.6;
+  background-image:
+    radial-gradient(ellipse at top left, rgba(217,147,46,0.07), transparent 45%),
+    radial-gradient(ellipse at bottom right, rgba(106,138,63,0.06), transparent 50%);
+}
+
+a { color: inherit; text-decoration: none; }
+
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 28px; }
+@media (max-width: 420px) { .wrap { padding: 0 18px; } }
+
+/* ---------- Nav ---------- */
+.site-nav {
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 20;
+  background: rgba(20,23,15,0.88);
+  backdrop-filter: blur(10px);
+}
+.site-nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 68px; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 13px; letter-spacing: .04em; color: var(--text); }
+.brand-mark { width: 22px; height: 22px; flex-shrink: 0; }
+.brand-mark svg { width: 100%; height: 100%; display: block; }
+.nav-links { display: flex; align-items: center; gap: 28px; font-family: var(--mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+.nav-links a { color: var(--muted); transition: color .15s; padding: 4px 0; border-bottom: 1px solid transparent; }
+.nav-links a:hover, .nav-links a.active { color: var(--gold); border-bottom-color: var(--gold); }
+.nav-cta {
+  background: var(--gold); color: #14170f; font-family: var(--mono); font-size: 12px;
+  font-weight: 700; letter-spacing: .05em; padding: 9px 18px; border-radius: var(--radius-sm);
+  transition: opacity .15s, transform .1s;
+}
+.nav-cta:hover { opacity: .88; }
+.nav-cta:active { transform: scale(.97); }
+
+@media (max-width: 700px) {
+  .site-nav .wrap { height: 60px; }
+  .nav-links { display: none; }
+  .brand { font-size: 11px; gap: 7px; }
+  .brand-mark { width: 18px; height: 18px; }
+  .nav-cta { padding: 8px 14px; font-size: 11px; }
+}
+
+/* ---------- Generic section scaffolding ---------- */
+section {
+  padding: 64px 0; scroll-margin-top: 69px; border-top: 1px solid var(--border);
+  min-height: calc(100vh - 69px); display: flex; flex-direction: column; justify-content: center;
+  scroll-snap-align: start;
+}
+section:first-of-type { border-top: none; }
+
+@media (max-width: 780px) {
+  html { scroll-snap-type: none; }
+  section, header.hero { min-height: auto; scroll-snap-align: none; }
+}
+header.hero { scroll-margin-top: 69px; scroll-snap-align: start; }
+.eyebrow {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 16px;
+}
+h1, h2, h3 { font-family: var(--display); font-weight: 600; line-height: 1.12; }
+h2 { font-size: clamp(26px, 3.4vw, 38px); margin-bottom: 18px; }
+.section-sub { color: var(--muted); max-width: 560px; font-size: 15.5px; }
+
+/* Scroll reveal */
+.reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s ease, transform .6s ease; }
+.reveal.in { opacity: 1; transform: translateY(0); }
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: .04em;
+  padding: 14px 30px; border-radius: var(--radius-sm); cursor: pointer; border: none;
+  transition: opacity .15s, transform .1s;
+}
+.btn:active { transform: scale(.98); }
+.btn-primary { background: var(--gold); color: #14170f; }
+.btn-primary:hover { opacity: .88; }
+.btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.btn-ghost:hover { border-color: var(--muted); }
+
+footer.site-footer {
+  border-top: 1px solid var(--border); margin-top: 40px; padding: 28px 0;
+  font-family: var(--mono); font-size: 11px; color: var(--muted-dim);
+}
+footer.site-footer .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
