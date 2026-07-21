@@ -9,7 +9,7 @@ import uuid
 import numpy as np
 from flask import Flask, request, render_template, jsonify
 from PIL import Image
-import tensorflow as tf
+from ai_edge_litert.interpreter import Interpreter
 
 app = Flask(__name__)
 
@@ -28,7 +28,7 @@ CONFIDENCE_THRESHOLD = 85.0  # below this → reject as not oil palm
 #   these tests, confidently misclassifying every OOD image at 95-99%
 #   confidence. ResNet50V2 (90.82% acc) passed 3/4, failing once at 98.2%.
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "mobilenetv2_final.keras")
+MODEL_PATH = os.path.join(BASE_DIR, "mobilenetv2_final.tflite")
 MODEL_INPUT_SIZE = (224, 224)   # auto-corrected to (299,299) below once the model loads; this is just the pre-load default
 
 CLASS_NAMES  = ["Overripe", "Ripe", "Unripe"]
@@ -47,20 +47,26 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_MB * 1024 * 1024
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # ── Load model once at startup ────────────────────────────────
-model = None
+interpreter = None
+input_details = None
+output_details = None
 
 def load_model():
-    global model, MODEL_INPUT_SIZE
+    global interpreter, input_details, output_details, MODEL_INPUT_SIZE
     if not os.path.exists(MODEL_PATH):
         print(f"[WARNING] Model not found at: {MODEL_PATH}")
         print("          The app will run in DEMO mode with random predictions.")
         return
 
     print(f"[App] Loading model: {MODEL_PATH}")
-    model = tf.keras.models.load_model(MODEL_PATH)
+    interpreter = Interpreter(model_path=MODEL_PATH)
+    interpreter.allocate_tensors()
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
 
     # Auto-detect InceptionV3 by input shape
-    if model.input_shape[1] == 299:
+    input_shape = input_details[0]["shape"]
+    if input_shape[1] == 299:
         MODEL_INPUT_SIZE = (299, 299)
 
     print(f"[App] Model loaded. Input size: {MODEL_INPUT_SIZE}")
@@ -88,11 +94,13 @@ def predict(image_path):
     Run inference. Returns dict with class, confidence, and all probabilities.
     Falls back to demo mode if no model is loaded.
     """
-    if model is None:
+    if interpreter is None:
         probs = np.random.dirichlet(np.ones(3)).tolist()
     else:
-        arr   = preprocess_image(image_path)
-        probs = model.predict(arr, verbose=0)[0].tolist()
+        arr = preprocess_image(image_path)
+        interpreter.set_tensor(input_details[0]["index"], arr)
+        interpreter.invoke()
+        probs = interpreter.get_tensor(output_details[0]["index"])[0].tolist()
 
     pred_idx   = int(np.argmax(probs))
     confidence = round(probs[pred_idx] * 100, 2)
@@ -115,7 +123,7 @@ def predict(image_path):
             }
             for i in range(len(CLASS_NAMES))
         ],
-        "demo_mode": model is None,
+        "demo_mode": interpreter is None,
     }
 
 
@@ -159,7 +167,7 @@ def predict_route():
 def health():
     return jsonify({
         "status":       "ok",
-        "model_loaded": model is not None,
+        "model_loaded": interpreter is not None,
         "model_path":   MODEL_PATH,
         "input_size":   list(MODEL_INPUT_SIZE),
         "threshold":    CONFIDENCE_THRESHOLD,

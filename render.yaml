@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: ffb-ripeness-detector
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
