@@ -27,7 +27,8 @@ CONFIDENCE_THRESHOLD = 85.0  # below this → reject as not oil palm
 #   the <85% confidence warning). InceptionV3 (95.17% acc) failed 0/4 of
 #   these tests, confidently misclassifying every OOD image at 95-99%
 #   confidence. ResNet50V2 (90.82% acc) passed 3/4, failing once at 98.2%.
-MODEL_PATH = r"C:\Users\nazif\Desktop\oil_palm_cnn\models\mobilenetv2_final.keras"
+BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "mobilenetv2_final.keras")
 MODEL_INPUT_SIZE = (224, 224)   # auto-corrected to (299,299) below once the model loads; this is just the pre-load default
 
 CLASS_NAMES  = ["Overripe", "Ripe", "Unripe"]
@@ -167,7 +168,9 @@ def health():
 
 # ── Entry point ───────────────────────────────────────────────
 
+load_model()
+
 if __name__ == "__main__":
-    load_model()
-    print("\n[App] Starting server at http://127.0.0.1:5000\n")
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 7860))
+    print(f"\n[App] Starting server at http://127.0.0.1:{port}\n")
+    app.run(debug=False, host="0.0.0.0", port=port)
